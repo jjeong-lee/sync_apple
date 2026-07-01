@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --background: 210 20% 98%;
+  --foreground: 222 24% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 24% 11%;
+  --muted: 220 20% 95%;
+  --muted-foreground: 215 12% 45%;
+  --border: 214 18% 88%;
+  --input: 214 18% 88%;
+  --ring: 205 88% 54%;
+  --accent: 205 88% 54%;
+  --destructive: 0 72% 51%;
+  font-family: 'Inter', 'Pretendard', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 35%, #eef2f7 100%);
+  color: hsl(var(--foreground));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body,
+button,
+input,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#root {
+  isolation: isolate;
+}
+
+::selection {
+  background: rgba(14, 165, 233, 0.16);
+}
