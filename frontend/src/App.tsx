@@ -14,11 +14,20 @@ import type {
 
 const demoMemberId = 301;
 
-const currency = new Intl.NumberFormat('ko-KR', {
-  style: 'currency',
-  currency: 'KRW',
-  maximumFractionDigits: 0,
+const numberFormatter = new Intl.NumberFormat('ko-KR');
+
+const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
 });
+
+const emptyPreview: OrderPreview = {
+  items: [],
+  subtotal: 0,
+  shippingFee: 0,
+  totalAmount: 0,
+};
 
 const mainNavItems = [
   { href: '#catalog', label: '제품 탐색' },
@@ -31,6 +40,20 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
+function formatPrice(value: number) {
+  return `${numberFormatter.format(value)}원`;
+}
+
+function isSoldOut(product: ProductSummary) {
+  return product.availableStock <= 0;
+}
+
+function estimateDeliveryDate(createdAt: string) {
+  const deliveryDate = new Date(createdAt);
+  deliveryDate.setDate(deliveryDate.getDate() + 2);
+  return dateFormatter.format(deliveryDate);
+}
+
 function App() {
   const [home, setHome] = useState<HomeContent | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -41,6 +64,7 @@ function App() {
   const [preview, setPreview] = useState<OrderPreview | null>(null);
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null);
+  const [completedOrder, setCompletedOrder] = useState<OrderRecord | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('featured');
@@ -67,7 +91,7 @@ function App() {
       api.cart(demoMemberId),
       api.member(demoMemberId),
       api.orders(demoMemberId),
-      api.orderPreview(demoMemberId),
+      api.orderPreview(demoMemberId).catch(() => emptyPreview),
       api.adminOverview(),
     ])
       .then(([homeData, categoryData, productData, cartData, memberData, orderData, previewData, adminData]) => {
@@ -131,6 +155,7 @@ function App() {
   }, [query, category, sort, stockStatus]);
 
   const featuredCards = useMemo(() => home?.featured ?? products.slice(0, 3), [home, products]);
+  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const heroBadges = useMemo(
     () => [
       `${categories.length} categories`,
@@ -175,10 +200,35 @@ function App() {
     setBannerMessage('선택한 상품을 Cart에 담았습니다.');
   };
 
+  const syncPreview = async (nextCart: CartItem[]) => {
+    if (nextCart.length === 0) {
+      setPreview(emptyPreview);
+      return;
+    }
+
+    setPreview(await api.orderPreview(demoMemberId).catch(() => emptyPreview));
+  };
+
+  const updateCartQuantity = async (item: CartItem, nextQuantity: number) => {
+    const nextCart =
+      nextQuantity <= 0
+        ? await api.removeCart(demoMemberId, item.cartItemId)
+        : await api.updateCart(demoMemberId, item.cartItemId, nextQuantity);
+
+    setCart(nextCart);
+    await syncPreview(nextCart);
+    setBannerMessage(nextCart.length === 0 ? '장바구니를 비웠습니다.' : '장바구니 수량을 업데이트했습니다.');
+  };
+
+  const moveToCatalog = () => {
+    window.location.hash = 'catalog';
+  };
+
   const submitOrder = async () => {
     const order = await api.createOrder(demoMemberId, 401, `web-${Date.now()}`);
     setOrders((currentOrders) => [order, ...currentOrders]);
-    setPreview(await api.orderPreview(demoMemberId).catch(() => null));
+    setCompletedOrder(order);
+    setPreview(await api.orderPreview(demoMemberId).catch(() => emptyPreview));
     setBannerMessage(`주문이 완료되었습니다. 주문번호 ${order.orderNumber}`);
   };
 
@@ -315,6 +365,28 @@ function App() {
           {bannerMessage ? <InlineBanner tone="success">{bannerMessage}</InlineBanner> : null}
         </div>
 
+        {completedOrder ? (
+          <Card className="overflow-hidden border-emerald-500/20 bg-[linear-gradient(135deg,rgba(240,253,244,0.98),rgba(236,253,245,0.92))]">
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.28em] text-emerald-700">Order complete</p>
+                <h3 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">주문이 완료되었습니다</h3>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">주문번호와 배송 일정을 바로 확인할 수 있도록 완료 정보를 크게 노출했습니다.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[24px] border border-emerald-500/15 bg-white/85 p-5 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">주문번호</p>
+                  <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{completedOrder.orderNumber}</p>
+                </div>
+                <div className="rounded-[24px] border border-emerald-500/15 bg-white/85 p-5 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">예상 배송일</p>
+                  <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{estimateDeliveryDate(completedOrder.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
         {pageError ? (
           <Card className="border-destructive/20 bg-destructive/5">
             <EmptyState
@@ -340,16 +412,24 @@ function App() {
             ) : (
               (() => {
                 const featuredProduct = product as ProductSummary;
+                const soldOut = isSoldOut(featuredProduct);
 
                 return (
               <button
                 key={featuredProduct.id}
                 onClick={() => openProduct(featuredProduct.slug)}
-                className="group overflow-hidden rounded-[28px] border border-border bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className={cn(
+                  'group overflow-hidden rounded-[28px] border border-border bg-card text-left shadow-sm transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  soldOut ? 'opacity-60' : 'hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg',
+                )}
               >
                 <div className="relative h-56 overflow-hidden bg-muted">
                   {featuredProduct.heroImageUrl ? (
-                    <img src={featuredProduct.heroImageUrl} alt={featuredProduct.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+                    <img
+                      src={featuredProduct.heroImageUrl}
+                      alt={featuredProduct.name}
+                      className={cn('h-full w-full object-cover transition-transform duration-500', soldOut ? 'grayscale' : 'group-hover:scale-[1.04]')}
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#eff6ff,#e2e8f0_40%,#f8fafc)] text-sm text-muted-foreground">
                       이미지 준비 중
@@ -357,8 +437,8 @@ function App() {
                   )}
                   <div className="absolute inset-x-4 top-4 flex items-center justify-between gap-2">
                     <Badge>{featuredProduct.badge ?? featuredProduct.categoryName}</Badge>
-                    <Badge variant={featuredProduct.availableStock > 0 ? 'secondary' : 'outline'}>
-                      {featuredProduct.availableStock > 0 ? `재고 ${featuredProduct.availableStock}` : '품절'}
+                    <Badge variant={soldOut ? 'outline' : 'secondary'}>
+                      {soldOut ? '품절' : `재고 ${featuredProduct.availableStock}`}
                     </Badge>
                   </div>
                 </div>
@@ -368,7 +448,7 @@ function App() {
                     <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">{featuredProduct.shortDescription}</p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-                    <p className="text-lg font-semibold text-foreground">{currency.format(featuredProduct.salePrice ?? featuredProduct.price)}</p>
+                    <p className="text-lg font-semibold text-foreground">{formatPrice(featuredProduct.salePrice ?? featuredProduct.price)}</p>
                     <span className="text-sm font-medium text-accent transition-transform duration-200 group-hover:translate-x-1">
                       자세히 보기 →
                     </span>
@@ -469,36 +549,52 @@ function App() {
                 />
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                  {products.map((product) => (
+                  {products.map((product) => {
+                    const soldOut = isSoldOut(product);
+
+                    return (
                     <article
                       key={product.id}
-                      className="overflow-hidden rounded-[26px] border border-border bg-card transition-all duration-300 hover:border-accent/30 hover:shadow-md"
+                      className={cn(
+                        'overflow-hidden rounded-[26px] border border-border bg-card transition-all duration-300',
+                        soldOut ? 'opacity-60' : 'hover:border-accent/30 hover:shadow-md',
+                      )}
                     >
-                      <div className="h-44 overflow-hidden bg-muted">
+                      <div className="relative h-44 overflow-hidden bg-muted">
                         {product.heroImageUrl ? (
-                          <img src={product.heroImageUrl} alt={product.name} className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]" />
+                          <img
+                            src={product.heroImageUrl}
+                            alt={product.name}
+                            className={cn('h-full w-full object-cover transition-transform duration-500', soldOut ? 'grayscale' : 'hover:scale-[1.03]')}
+                          />
                         ) : (
                           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">이미지 없음</div>
                         )}
+                        {soldOut ? (
+                          <div className="absolute right-4 top-4">
+                            <Badge variant="outline">품절</Badge>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="space-y-4 p-5">
                         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                           <span>{product.categoryName}</span>
-                          <span>{product.availableStock > 0 ? `재고 ${product.availableStock}` : '품절'}</span>
+                          <span>{soldOut ? '품절' : `재고 ${product.availableStock}`}</span>
                         </div>
                         <div className="space-y-2">
                           <h3 className="text-xl font-semibold tracking-tight text-foreground">{product.name}</h3>
                           <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">{product.shortDescription}</p>
                         </div>
                         <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-                          <p className="text-base font-semibold text-foreground">{currency.format(product.salePrice ?? product.price)}</p>
+                          <p className="text-base font-semibold text-foreground">{formatPrice(product.salePrice ?? product.price)}</p>
                           <Button size="sm" onClick={() => openProduct(product.slug)}>
                             상세 보기
                           </Button>
                         </div>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -527,41 +623,71 @@ function App() {
                   ))
                 ) : cart.length === 0 ? (
                   <EmptyState
-                    title="장바구니가 비어 있습니다"
-                    description="상품 상세에서 Cart에 담기를 선택하면 이 영역에 즉시 반영됩니다."
+                    title="장바구니가 비었습니다"
+                    description="원하는 상품을 둘러보고 다시 담아 보세요. 담는 즉시 이 요약 패널에 반영됩니다."
+                    actionLabel="쇼핑 계속하기"
+                    onAction={moveToCatalog}
                     tone="inverted"
                   />
                 ) : (
-                  cart.map((item) => (
+                  cart.map((item) => {
+                    const cartProduct = productsById.get(item.productId);
+                    const soldOut = cartProduct ? isSoldOut(cartProduct) : false;
+
+                    return (
                     <div key={item.cartItemId} className="rounded-[22px] border border-white/10 bg-white/6 p-4 transition-colors duration-200 hover:bg-white/8">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-white">{item.productName}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-white">{item.productName}</p>
+                            {soldOut ? <Badge variant="secondary-dark">품절</Badge> : null}
+                          </div>
                           <p className="text-xs text-slate-400">{item.optionLabel}</p>
                         </div>
-                        <p className="text-sm font-semibold text-white">{currency.format(item.lineTotal)}</p>
+                        <p className="text-sm font-semibold text-white">{formatPrice(item.lineTotal)}</p>
                       </div>
-                      <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                        <span>수량 {item.quantity}</span>
-                        <span>{currency.format(item.unitPrice)} / 개</span>
+                      <div className="mt-4 flex items-center justify-between gap-4 text-xs text-slate-400">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-2 py-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-full px-0 text-white hover:bg-white/10 hover:text-white"
+                            onClick={() => updateCartQuantity(item, item.quantity - 1)}
+                            ariaLabel={`${item.productName} 수량 감소`}
+                          >
+                            −
+                          </Button>
+                          <span className="min-w-8 text-center text-sm font-semibold text-white">{item.quantity}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-full px-0 text-white hover:bg-white/10 hover:text-white"
+                            onClick={() => updateCartQuantity(item, item.quantity + 1)}
+                            ariaLabel={`${item.productName} 수량 증가`}
+                          >
+                            +
+                          </Button>
+                        </div>
+                        <span>{formatPrice(item.unitPrice)} / 개</span>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
               <div className="mt-6 rounded-[24px] border border-white/10 bg-white/8 p-4">
                 <div className="flex items-center justify-between text-sm text-slate-300">
                   <span>상품 합계</span>
-                  <span>{currency.format(preview?.subtotal ?? 0)}</span>
+                  <span>{formatPrice(preview?.subtotal ?? 0)}</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-sm text-slate-300">
                   <span>배송비</span>
-                  <span>{currency.format(preview?.shippingFee ?? 0)}</span>
+                  <span>{formatPrice(preview?.shippingFee ?? 0)}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold text-white">
                   <span>예상 결제</span>
-                  <span>{currency.format(preview?.totalAmount ?? 0)}</span>
+                  <span>{formatPrice(preview?.totalAmount ?? 0)}</span>
                 </div>
                 <Button className="mt-4 w-full" size="lg" variant="light" onClick={submitOrder}>
                   주문 완료 시뮬레이션
@@ -616,7 +742,7 @@ function App() {
                             {order.paymentStatus} · {order.orderStatus}
                           </p>
                         </div>
-                        <p className="text-sm font-semibold text-foreground">{currency.format(order.totalAmount)}</p>
+                        <p className="text-sm font-semibold text-foreground">{formatPrice(order.totalAmount)}</p>
                       </div>
                       <p className="mt-3 text-xs text-muted-foreground">배송지: {order.shippingAddress?.line1 ?? '기본 배송지'}</p>
                     </div>
@@ -696,7 +822,7 @@ function App() {
                           <td className="px-5 py-4 font-medium text-foreground">{order.orderNumber}</td>
                           <td className="px-5 py-4 text-muted-foreground">{order.orderStatus}</td>
                           <td className="px-5 py-4 text-muted-foreground">{order.paymentStatus}</td>
-                          <td className="px-5 py-4 font-medium text-foreground">{currency.format(order.totalAmount)}</td>
+                          <td className="px-5 py-4 font-medium text-foreground">{formatPrice(order.totalAmount)}</td>
                         </tr>
                       ))
                     ) : (
@@ -770,7 +896,7 @@ function App() {
                     <div className="rounded-[24px] border border-border bg-muted/60 p-5">
                       <p className="text-sm text-muted-foreground">판매가</p>
                       <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
-                        {currency.format(selectedProduct.product.salePrice ?? selectedProduct.product.price)}
+                        {formatPrice(selectedProduct.product.salePrice ?? selectedProduct.product.price)}
                       </p>
                     </div>
 
@@ -816,6 +942,7 @@ function App() {
 }
 
 function Button({
+  ariaLabel,
   asChild,
   children,
   className,
@@ -823,6 +950,7 @@ function Button({
   size = 'default',
   variant = 'default',
 }: {
+  ariaLabel?: string;
   asChild?: boolean;
   children: ReactNode;
   className?: string;
@@ -864,7 +992,7 @@ function Button({
   }
 
   return (
-    <button type="button" className={classes} onClick={onClick}>
+    <button type="button" aria-label={ariaLabel} className={classes} onClick={onClick}>
       {children}
     </button>
   );
