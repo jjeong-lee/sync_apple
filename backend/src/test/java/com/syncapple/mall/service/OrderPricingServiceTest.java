@@ -14,22 +14,22 @@ class OrderPricingServiceTest {
   @Test
   void addsShippingBelowFreeShippingThreshold() {
     OrderPreview preview = service.price(List.of(
-        new OrderLine(1L, 10L, "상품A", "옵션A", 1, new BigDecimal("500000"), new BigDecimal("500000")),
-        new OrderLine(2L, 20L, "상품B", "옵션B", 1, new BigDecimal("200000"), new BigDecimal("200000"))
+        new OrderLine(1L, 10L, "상품A", "옵션A", 1, new BigDecimal("30000"), new BigDecimal("30000")),
+        new OrderLine(2L, 20L, "상품B", "옵션B", 1, new BigDecimal("19000"), new BigDecimal("19000"))
     ));
 
-    assertThat(preview.subtotal()).isEqualByComparingTo("700000");
-    assertThat(preview.shippingFee()).isEqualByComparingTo("3000");
-    assertThat(preview.totalAmount()).isEqualByComparingTo("703000");
+    assertThat(preview.subtotal()).isEqualByComparingTo("49000");
+    assertThat(preview.shippingFee()).isEqualByComparingTo("2500");
+    assertThat(preview.totalAmount()).isEqualByComparingTo("51500");
   }
 
   @Test
-  void waivesShippingAtOneMillionWonOrMore() {
+  void waivesShippingAtFiftyThousandWonOrMore() {
     OrderPreview preview = service.price(List.of(
-        new OrderLine(1L, 10L, "상품A", "옵션A", 1, new BigDecimal("1000000"), new BigDecimal("1000000"))
+        new OrderLine(1L, 10L, "상품A", "옵션A", 1, new BigDecimal("50000"), new BigDecimal("50000"))
     ));
 
     assertThat(preview.shippingFee()).isEqualByComparingTo("0");
-    assertThat(preview.totalAmount()).isEqualByComparingTo("1000000");
+    assertThat(preview.totalAmount()).isEqualByComparingTo("50000");
   }
 }
