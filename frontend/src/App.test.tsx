@@ -65,26 +65,7 @@ const products: ProductSummary[] = [
     bestSeller: false,
     newArrival: true,
     sortOrder: 1,
-    availableStock: 0,
-  },
-  {
-    id: 103,
-    categoryId: 1,
-    categoryName: '액세서리',
-    name: 'Orbit Dock',
-    slug: 'orbit-dock',
-    shortDescription: '데스크를 정리하는 7-in-1 알루미늄 허브',
-    price: 249000,
-    salePrice: null,
-    heroImageUrl: null,
-    badge: 'Pro',
-    visible: true,
-    saleStatus: 'ON_SALE',
-    featured: true,
-    bestSeller: false,
-    newArrival: true,
-    sortOrder: 2,
-    availableStock: 17,
+    availableStock: 10,
   },
 ];
 
@@ -119,6 +100,8 @@ const increasedCart: CartItem[] = [
   },
 ];
 
+const emptyCart: CartItem[] = [];
+
 const initialPreview: OrderPreview = {
   items: [
     {
@@ -149,33 +132,18 @@ const updatedPreview: OrderPreview = {
   totalAmount: 341000,
 };
 
-const createdOrder: OrderRecord = {
-  id: 701,
-  orderNumber: 'ORD-20260702103000-701',
-  paymentMethod: 'CARD',
-  paymentStatus: 'AUTHORIZED',
-  orderStatus: 'PAID',
-  totalAmount: 341000,
-  createdAt: '2026-07-02T10:30:00',
-  shippingAddress: {
-    id: 401,
-    memberId: 301,
-    label: '집',
-    recipientName: '기본 회원',
-    phone: '010-1111-2222',
-    line1: '서울시 강남구 테헤란로 10',
-    line2: '18층',
-    postalCode: '06123',
-    defaultAddress: true,
-  },
-  items: updatedPreview.items,
+const emptyPreview: OrderPreview = {
+  items: [],
+  subtotal: 0,
+  shippingFee: 0,
+  totalAmount: 0,
 };
 
 const adminOverview: AdminOverview = {
   activeMembers: 1,
-  activeProducts: 2,
+  activeProducts: 1,
   liveBanners: 0,
-  openOrders: 1,
+  openOrders: 0,
   recentOrders: [],
 };
 
@@ -198,27 +166,54 @@ function configureApi({
   mockApi.orderPreview.mockResolvedValueOnce(preview).mockResolvedValue(updatedPreview);
   mockApi.adminOverview.mockResolvedValue(adminOverview);
   mockApi.updateCart.mockResolvedValue(increasedCart);
-  mockApi.createOrder.mockResolvedValue(createdOrder);
+  mockApi.removeCart.mockResolvedValue(emptyCart);
 }
 
-describe('App cart and order UX', () => {
+function renderAppAt(pathname: string) {
+  window.history.pushState({}, '', pathname);
+  render(<App />);
+}
+
+describe('App cart page UX', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/');
   });
 
-  it('shows sold-out styling, formats prices with commas, updates cart totals immediately, and highlights order completion details', async () => {
+  it('navigates to the dedicated /cart page from the header and shows cart item details', async () => {
     configureApi();
     const user = userEvent.setup();
 
-    render(<App />);
+    renderAppAt('/');
 
-    const soldOutProduct = (await screen.findAllByText('SilkCharge Duo')).find((node) => node.closest('article'));
-    const soldOutCard = soldOutProduct?.closest('article');
+    await screen.findByText('SilkCharge Duo');
 
-    expect(soldOutCard).toHaveClass('opacity-60');
-    expect(within(soldOutCard as HTMLElement).getAllByText('품절').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('169,000원').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('link', { name: '장바구니 페이지로 이동' }));
+
+    expect(window.location.pathname).toBe('/cart');
+    expect(await screen.findByRole('heading', { name: '장바구니' })).toBeInTheDocument();
+    expect(screen.queryByText('현재 담긴 상품')).not.toBeInTheDocument();
+    expect(screen.getByText('상품명')).toBeInTheDocument();
+    expect(screen.getByText('이미지')).toBeInTheDocument();
+    expect(screen.getByText('단가')).toBeInTheDocument();
+    expect(screen.getByText('수량')).toBeInTheDocument();
+    expect(screen.getByText('소계')).toBeInTheDocument();
+
+    const cartRow = screen.getByRole('row', { name: /SilkCharge Duo/ });
+    expect(within(cartRow).getByText('SilkCharge Duo')).toBeInTheDocument();
+    expect(within(cartRow).getAllByText('169,000원').length).toBeGreaterThan(0);
+    expect(within(cartRow).getByText('1')).toBeInTheDocument();
     expect(screen.getByText('172,000원')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '주문/결제 진행' })).toBeInTheDocument();
+  });
+
+  it('updates quantity and removes items from the cart page while refreshing totals immediately', async () => {
+    configureApi();
+    const user = userEvent.setup();
+
+    renderAppAt('/cart');
+
+    await screen.findByRole('heading', { name: '장바구니' });
 
     await user.click(screen.getByRole('button', { name: 'SilkCharge Duo 수량 증가' }));
 
@@ -230,27 +225,28 @@ describe('App cart and order UX', () => {
     expect(await screen.findByText('341,000원')).toBeInTheDocument();
     expect(screen.getAllByText('338,000원').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole('button', { name: '주문 완료 시뮬레이션' }));
+    await user.click(screen.getByRole('button', { name: 'SilkCharge Duo 삭제' }));
 
-    expect(await screen.findByRole('heading', { name: '주문이 완료되었습니다' })).toBeInTheDocument();
-    expect(screen.getAllByText('ORD-20260702103000-701').length).toBeGreaterThan(0);
-    expect(screen.getByText('2026년 7월 4일')).toBeInTheDocument();
-  });
-
-  it('shows the empty cart message and a continue shopping action when the cart has no items', async () => {
-    configureApi({
-      cart: [],
-      preview: {
-        items: [],
-        subtotal: 0,
-        shippingFee: 0,
-        totalAmount: 0,
-      },
+    await waitFor(() => {
+      expect(mockApi.removeCart).toHaveBeenCalledWith(301, 501);
     });
 
-    render(<App />);
+    expect(await screen.findByText('장바구니가 비어 있습니다')).toBeInTheDocument();
+    expect(screen.getAllByText('0원').length).toBeGreaterThan(0);
+  });
 
-    expect(await screen.findByText('장바구니가 비었습니다')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '쇼핑 계속하기' })).toBeInTheDocument();
+  it('shows an empty cart message and a continue shopping link on /cart', async () => {
+    configureApi({
+      cart: emptyCart,
+      preview: emptyPreview,
+    });
+
+    renderAppAt('/cart');
+
+    expect(await screen.findByText('장바구니가 비어 있습니다')).toBeInTheDocument();
+
+    const continueShoppingLink = screen.getByRole('link', { name: '쇼핑 계속하기' });
+
+    expect(continueShoppingLink).toHaveAttribute('href', '/');
   });
 });
