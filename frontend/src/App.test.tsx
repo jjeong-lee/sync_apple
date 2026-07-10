@@ -204,6 +204,7 @@ function configureApi({
 describe('App cart and order UX', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/');
   });
 
   it('shows sold-out styling, formats prices with commas, updates cart totals immediately, and highlights order completion details', async () => {
@@ -252,5 +253,44 @@ describe('App cart and order UX', () => {
 
     expect(await screen.findByText('장바구니가 비었습니다')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '쇼핑 계속하기' })).toBeInTheDocument();
+  });
+});
+
+describe('App admin routing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('keeps admin navigation and the operations dashboard off the storefront and exposes the admin entry in the footer', async () => {
+    configureApi();
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '브랜드 큐레이션 상품 탐색' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '운영 Dashboard 확인' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '운영 Dashboard' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '관리자' })).toHaveAttribute('href', '/admin');
+    expect(mockApi.adminOverview).not.toHaveBeenCalled();
+  });
+
+  it('renders the existing operations dashboard in the shared apple shell at the admin route', async () => {
+    configureApi();
+    mockApi.adminOverview.mockResolvedValue({ ...adminOverview, recentOrders: [createdOrder] });
+    window.history.replaceState({}, '', '/admin');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '운영 Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Premium Mall' })).toBeInTheDocument();
+    expect(screen.getByText('기본 회원 님')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '브랜드 큐레이션 상품 탐색' })).not.toBeInTheDocument();
+    expect(screen.getByText('공개 상품')).toBeInTheDocument();
+    expect(screen.getByText('최근 주문')).toBeInTheDocument();
+    expect(screen.getByText('ORD-20260702103000-701')).toBeInTheDocument();
+    expect(screen.getByText('341,000원')).toBeInTheDocument();
+    expect(mockApi.adminOverview).toHaveBeenCalledOnce();
+    expect(mockApi.home).not.toHaveBeenCalled();
   });
 });
