@@ -33,7 +33,6 @@ const mainNavItems = [
   { href: '#catalog', label: '제품 탐색' },
   { href: '#cart', label: '장바구니' },
   { href: '#mypage', label: 'My Page' },
-  { href: '#admin', label: 'Admin' },
 ] as const;
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -55,6 +54,7 @@ function estimateDeliveryDate(createdAt: string) {
 }
 
 function App() {
+  const isAdminPage = window.location.pathname === '/admin';
   const [home, setHome] = useState<HomeContent | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<ProductSummary[]>([]);
@@ -84,6 +84,30 @@ function App() {
     setInitialLoading(true);
     setPageError('');
 
+    if (isAdminPage) {
+      Promise.all([api.adminOverview(), api.member(demoMemberId)])
+        .then(([adminData, memberData]) => {
+          if (!cancelled) {
+            setAdminOverview(adminData);
+            setMember(memberData);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPageError('운영 데이터를 불러오지 못했습니다. 백엔드 컨테이너 연결 상태를 확인해 주세요.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setInitialLoading(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
     Promise.all([
       api.home(),
       api.categories(),
@@ -92,9 +116,8 @@ function App() {
       api.member(demoMemberId),
       api.orders(demoMemberId),
       api.orderPreview(demoMemberId).catch(() => emptyPreview),
-      api.adminOverview(),
     ])
-      .then(([homeData, categoryData, productData, cartData, memberData, orderData, previewData, adminData]) => {
+      .then(([homeData, categoryData, productData, cartData, memberData, orderData, previewData]) => {
         if (cancelled) {
           return;
         }
@@ -105,7 +128,6 @@ function App() {
         setMember(memberData);
         setOrders(orderData);
         setPreview(previewData);
-        setAdminOverview(adminData);
         setProductsError('');
         setBannerMessage('');
       })
@@ -124,9 +146,13 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdminPage]);
 
   useEffect(() => {
+    if (isAdminPage) {
+      return;
+    }
+
     let cancelled = false;
 
     setProductsLoading(true);
@@ -152,7 +178,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [query, category, sort, stockStatus]);
+  }, [category, isAdminPage, query, sort, stockStatus]);
 
   const featuredCards = useMemo(() => home?.featured ?? products.slice(0, 3), [home, products]);
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
@@ -252,7 +278,7 @@ function App() {
             {mainNavItems.map((item) => (
               <a
                 key={item.href}
-                href={item.href}
+                href={isAdminPage ? `/${item.href}` : item.href}
                 className="rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {item.label}
@@ -272,7 +298,14 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:gap-10 lg:py-10">
+      {isAdminPage ? (
+        <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:gap-10 lg:py-10">
+          {pageError ? <InlineBanner tone="critical">{pageError}</InlineBanner> : null}
+          <AdminDashboard adminOverview={adminOverview} initialLoading={initialLoading} />
+        </main>
+      ) : (
+        <>
+          <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:gap-10 lg:py-10">
         <section className="overflow-hidden rounded-[32px] border border-border/70 bg-slate-950 text-white shadow-[0_30px_90px_rgba(15,23,42,0.24)]">
           <div className="grid gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1.2fr)_22rem] lg:px-10 lg:py-10">
             <div className="flex flex-col gap-8">
@@ -286,7 +319,7 @@ function App() {
                     {home?.hero.title ?? '프리미엄 전자제품 경험을 하나의 흐름으로 연결합니다.'}
                   </h2>
                   <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                    {home?.hero.subtitle ?? '미니멀한 UI와 운영 대시보드를 한 화면 흐름으로 묶어, 탐색부터 주문과 운영까지 자연스럽게 이어지도록 설계했습니다.'}
+                    {home?.hero.subtitle ?? '미니멀한 UI로 상품 탐색부터 주문까지 자연스럽게 이어지는 쇼핑 경험을 제공합니다.'}
                   </p>
                 </div>
               </div>
@@ -294,9 +327,6 @@ function App() {
               <div className="flex flex-wrap items-center gap-3">
                 <Button asChild size="lg">
                   <a href="#catalog">{home?.hero.ctaLabel ?? 'Catalog 보기'}</a>
-                </Button>
-                <Button asChild size="lg" variant="secondary-dark">
-                  <a href="#admin">운영 Dashboard 확인</a>
                 </Button>
               </div>
 
@@ -334,7 +364,7 @@ function App() {
               <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
                 <div className="flex items-center gap-2 text-slate-400">
                   <PulseIcon className="h-4 w-4" />
-                  운영 요약
+                  쇼핑 요약
                 </div>
                 <p className="mt-3 text-lg font-medium text-white">
                   탐색, 결제 예상 금액, 최근 주문 흐름을 하나의 화면 리듬으로 묶었습니다.
@@ -357,9 +387,9 @@ function App() {
               description="결제 예정 품목 수"
             />
             <QuickSummaryCard
-              label="운영 알림"
-              value={adminOverview?.recentOrders.length ?? 0}
-              description="최근 주문 트래킹 항목"
+              label="최근 주문"
+              value={orders.length}
+              description="확인 가능한 주문 이력"
             />
           </div>
           {bannerMessage ? <InlineBanner tone="success">{bannerMessage}</InlineBanner> : null}
@@ -753,95 +783,18 @@ function App() {
           </div>
         </section>
 
-        <Card id="admin" className="overflow-hidden p-0">
-          <div className="border-b border-border px-6 py-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <SectionHeading
-                eyebrow="Admin"
-                title="운영 Dashboard"
-                description="주문 추적 테이블과 요약 카드를 분리해 운영 시선이 숫자에서 상태로 자연스럽게 이동하도록 구성했습니다."
-              />
-              <div className="rounded-2xl border border-border bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
-                공개 화면과 운영 화면을 한 리듬 안에서 분리해 밀도를 유지합니다.
-              </div>
-            </div>
-          </div>
+          </main>
 
-          <div className="space-y-6 px-6 py-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {(initialLoading
-                ? Array.from({ length: 4 }).map((_, index) => ({ id: `metric-${index}` }))
-                : [
-                    { id: 'active-products', label: '공개 상품', value: adminOverview?.activeProducts ?? 0 },
-                    { id: 'active-members', label: '활성 회원', value: adminOverview?.activeMembers ?? 0 },
-                    { id: 'open-orders', label: '진행 주문', value: adminOverview?.openOrders ?? 0 },
-                    { id: 'live-banners', label: '라이브 배너', value: adminOverview?.liveBanners ?? 0 },
-                  ]).map((metric) =>
-                'label' in metric ? (
-                  <MetricCard key={metric.id} label={metric.label} value={metric.value} />
-                ) : (
-                  <Card key={metric.id} className="p-5">
-                    <SkeletonBlock className="h-4 w-20" />
-                    <SkeletonBlock className="mt-4 h-9 w-24" />
-                  </Card>
-                ),
-              )}
+          <footer className="border-t border-border/70 bg-background/80">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-6 sm:px-6">
+              <p className="text-sm text-muted-foreground">Sync Apple Premium Mall</p>
+              <Button asChild variant="secondary">
+                <a href="/admin">관리자</a>
+              </Button>
             </div>
-
-            <div className="overflow-hidden rounded-[24px] border border-border bg-card">
-              <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">최근 주문</p>
-                  <p className="mt-1 text-sm text-muted-foreground">실시간 운영 상태를 빠르게 확인할 수 있는 요약 테이블입니다.</p>
-                </div>
-                <Badge variant="outline">{adminOverview?.recentOrders.length ?? 0} rows</Badge>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-muted/60 text-muted-foreground">
-                    <tr>
-                      <th className="px-5 py-4 font-medium">주문번호</th>
-                      <th className="px-5 py-4 font-medium">상태</th>
-                      <th className="px-5 py-4 font-medium">결제</th>
-                      <th className="px-5 py-4 font-medium">금액</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {initialLoading ? (
-                      Array.from({ length: 4 }).map((_, index) => (
-                        <tr key={`admin-row-skeleton-${index}`}>
-                          <td className="px-5 py-4" colSpan={4}>
-                            <SkeletonBlock className="h-5 w-full" />
-                          </td>
-                        </tr>
-                      ))
-                    ) : adminOverview?.recentOrders.length ? (
-                      adminOverview.recentOrders.map((order) => (
-                        <tr key={order.id} className="transition-colors duration-200 hover:bg-muted/40">
-                          <td className="px-5 py-4 font-medium text-foreground">{order.orderNumber}</td>
-                          <td className="px-5 py-4 text-muted-foreground">{order.orderStatus}</td>
-                          <td className="px-5 py-4 text-muted-foreground">{order.paymentStatus}</td>
-                          <td className="px-5 py-4 font-medium text-foreground">{formatPrice(order.totalAmount)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td className="px-5 py-8" colSpan={4}>
-                          <EmptyState
-                            title="주문 데이터가 아직 없습니다"
-                            description="첫 주문이 생성되면 이 표에서 결제 상태와 진행 상황을 확인할 수 있습니다."
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </main>
+          </footer>
+        </>
+      )}
 
       {dialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
@@ -938,6 +891,105 @@ function App() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function AdminDashboard({
+  adminOverview,
+  initialLoading,
+}: {
+  adminOverview: AdminOverview | null;
+  initialLoading: boolean;
+}) {
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="border-b border-border px-6 py-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeading
+            eyebrow="Admin"
+            title="운영 Dashboard"
+            description="주문 추적 테이블과 요약 카드를 분리해 운영 시선이 숫자에서 상태로 자연스럽게 이동하도록 구성했습니다."
+          />
+          <div className="rounded-2xl border border-border bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
+            고객 화면과 분리된 운영 전용 페이지입니다.
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6 px-6 py-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {(initialLoading
+            ? Array.from({ length: 4 }).map((_, index) => ({ id: `metric-${index}` }))
+            : [
+                { id: 'active-products', label: '공개 상품', value: adminOverview?.activeProducts ?? 0 },
+                { id: 'active-members', label: '활성 회원', value: adminOverview?.activeMembers ?? 0 },
+                { id: 'open-orders', label: '진행 주문', value: adminOverview?.openOrders ?? 0 },
+                { id: 'live-banners', label: '라이브 배너', value: adminOverview?.liveBanners ?? 0 },
+              ]).map((metric) =>
+            'label' in metric ? (
+              <MetricCard key={metric.id} label={metric.label} value={metric.value} />
+            ) : (
+              <Card key={metric.id} className="p-5">
+                <SkeletonBlock className="h-4 w-20" />
+                <SkeletonBlock className="mt-4 h-9 w-24" />
+              </Card>
+            ),
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-[24px] border border-border bg-card">
+          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">최근 주문</p>
+              <p className="mt-1 text-sm text-muted-foreground">실시간 운영 상태를 빠르게 확인할 수 있는 요약 테이블입니다.</p>
+            </div>
+            <Badge variant="outline">{adminOverview?.recentOrders.length ?? 0} rows</Badge>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/60 text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-4 font-medium">주문번호</th>
+                  <th className="px-5 py-4 font-medium">상태</th>
+                  <th className="px-5 py-4 font-medium">결제</th>
+                  <th className="px-5 py-4 font-medium">금액</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {initialLoading ? (
+                  Array.from({ length: 4 }).map((_, index) => (
+                    <tr key={`admin-row-skeleton-${index}`}>
+                      <td className="px-5 py-4" colSpan={4}>
+                        <SkeletonBlock className="h-5 w-full" />
+                      </td>
+                    </tr>
+                  ))
+                ) : adminOverview?.recentOrders.length ? (
+                  adminOverview.recentOrders.map((order) => (
+                    <tr key={order.id} className="transition-colors duration-200 hover:bg-muted/40">
+                      <td className="px-5 py-4 font-medium text-foreground">{order.orderNumber}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{order.orderStatus}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{order.paymentStatus}</td>
+                      <td className="px-5 py-4 font-medium text-foreground">{formatPrice(order.totalAmount)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-5 py-8" colSpan={4}>
+                      <EmptyState
+                        title="주문 데이터가 아직 없습니다"
+                        description="첫 주문이 생성되면 이 표에서 결제 상태와 진행 상황을 확인할 수 있습니다."
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
