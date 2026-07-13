@@ -25,13 +25,17 @@ public class ProductCatalogService {
 
   public List<ProductSummary> products(String query, String categorySlug, String sort, String stockStatus) {
     List<ProductSummary> candidates = visibleProducts(catalogRepository.findAllProducts());
-    String normalizedQuery = query == null ? "" : query.toLowerCase(Locale.ROOT).trim();
+    String normalizedQuery = normalizeSearchText(query);
     return candidates.stream()
-        .filter(product -> normalizedQuery.isBlank() || product.name().toLowerCase(Locale.ROOT).contains(normalizedQuery) || product.shortDescription().toLowerCase(Locale.ROOT).contains(normalizedQuery) || product.categoryName().toLowerCase(Locale.ROOT).contains(normalizedQuery))
+        .filter(product -> normalizedQuery.isBlank() || normalizeSearchText(product.name()).contains(normalizedQuery) || normalizeSearchText(product.shortDescription()).contains(normalizedQuery) || normalizeSearchText(product.categoryName()).contains(normalizedQuery))
         .filter(product -> categorySlug == null || categorySlug.isBlank() || matchesCategorySlug(product, categorySlug))
         .filter(product -> stockStatus == null || stockStatus.isBlank() || matchesStockStatus(product, stockStatus))
         .sorted(resolveComparator(sort))
         .toList();
+  }
+
+  private String normalizeSearchText(String value) {
+    return value == null ? "" : value.trim().replaceAll("[ \\t]+", " ").toLowerCase(Locale.ROOT);
   }
 
   public ProductDetail productDetail(String slug) {
