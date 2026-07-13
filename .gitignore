@@ -7,3 +7,9 @@ coverage/
 .cache/
 *.log
 *.local
+
+# Playwright verifier artifacts
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
