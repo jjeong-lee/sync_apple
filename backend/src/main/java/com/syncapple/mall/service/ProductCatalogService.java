@@ -77,7 +77,9 @@ public class ProductCatalogService {
           .thenComparing(ProductSummary::id);
     }
     return switch (sort) {
-      case "popular" -> Comparator.comparing(ProductSummary::bestSeller).reversed().thenComparing(ProductSummary::featured).reversed().thenComparing(ProductSummary::sortOrder);
+      case "popular" -> Comparator.comparing(ProductSummary::bestSeller).reversed()
+          .thenComparing(Comparator.comparing(ProductSummary::featured).reversed())
+          .thenComparing(ProductSummary::sortOrder);
       case "newest" -> Comparator.comparing(ProductSummary::newArrival).reversed().thenComparing(ProductSummary::sortOrder);
       case "price_asc" -> Comparator.comparing(ProductSummary::effectivePrice).thenComparing(ProductSummary::sortOrder);
       case "price_desc" -> Comparator.comparing(ProductSummary::effectivePrice).reversed().thenComparing(ProductSummary::sortOrder);
