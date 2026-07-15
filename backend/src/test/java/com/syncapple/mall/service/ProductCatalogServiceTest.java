@@ -88,6 +88,16 @@ class ProductCatalogServiceTest {
     assertThat(results).extracting(ProductSummary::id).containsExactly(2L, 1L);
   }
 
+  @Test
+  void sortsBestSellersBeforeRegularProductsWhenSortingByPopularity() {
+    ProductSummary regular = product(1L, true, "ON_SALE", new BigDecimal("1000"), null, false, false, false, 10);
+    ProductSummary bestSeller = product(2L, true, "ON_SALE", new BigDecimal("1000"), null, false, true, false, 10);
+
+    List<ProductSummary> results = service.applyVisibilityAndSort(List.of(regular, bestSeller), "popular");
+
+    assertThat(results).extracting(ProductSummary::id).containsExactly(2L, 1L);
+  }
+
   private ProductSummary product(long id, boolean visible, String saleStatus, BigDecimal price, BigDecimal salePrice, boolean featured, boolean bestSeller, boolean newArrival, int stock) {
     return new ProductSummary(id, 1L, "노트북", "상품" + id, "product-" + id, "설명", price, salePrice, null, null, visible, saleStatus, featured, bestSeller, newArrival, 1, stock);
   }
