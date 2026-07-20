@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16.4
+    pull_policy: build
+    build:
+      context: ./infra/postgres
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-premium_mall}
+      POSTGRES_USER: ${POSTGRES_USER:-mall}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mall}
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mall} -d ${POSTGRES_DB:-premium_mall}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: premium-mall-backend:latest
+    pull_policy: build
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-premium_mall}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-mall}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-mall}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    image: premium-mall-frontend:latest
+    pull_policy: build
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
