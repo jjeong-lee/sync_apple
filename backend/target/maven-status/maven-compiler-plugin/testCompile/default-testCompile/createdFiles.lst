@@ -1,0 +1,4 @@
+com/syncapple/mall/service/ProductCatalogServiceTest.class
+com/syncapple/mall/service/OrderPricingServiceTest.class
+com/syncapple/mall/service/HomeContentServiceTest.class
+com/syncapple/mall/repository/CommerceRepositoryTest.class
