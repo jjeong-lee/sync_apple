@@ -3,3 +3,7 @@ dist
 build
 coverage
 .git
+target
+*.log
+.env
+.next
