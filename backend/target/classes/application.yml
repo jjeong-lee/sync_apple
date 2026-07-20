@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: premium-mall
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/premium_mall}
+    username: ${SPRING_DATASOURCE_USERNAME:mall}
+    password: ${SPRING_DATASOURCE_PASSWORD:mall}
+  sql:
+    init:
+      mode: always
+  jackson:
+    default-property-inclusion: non_null
+server:
+  error:
+    include-message: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

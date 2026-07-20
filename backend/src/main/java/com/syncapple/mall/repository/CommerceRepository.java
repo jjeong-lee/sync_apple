@@ -31,7 +31,7 @@ public class CommerceRepository {
         JOIN products p ON p.id = ci.product_id
         JOIN product_options po ON po.id = ci.option_id
         WHERE ci.member_id = ?
-        ORDER BY ci.updated_at DESC, ci.id DESC
+        ORDER BY ci.created_at DESC, ci.id DESC
         """,
         (rs, rowNum) -> new CartItemView(
             rs.getLong("cart_item_id"),
