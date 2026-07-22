@@ -7,16 +7,20 @@ import com.syncapple.mall.domain.ProductOption;
 import com.syncapple.mall.domain.ProductSummary;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class CatalogRepository {
   private final JdbcTemplate jdbcTemplate;
+  private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-  public CatalogRepository(JdbcTemplate jdbcTemplate) {
+  public CatalogRepository(
+      JdbcTemplate jdbcTemplate, NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
+    this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
   }
 
   public List<Banner> findBannersByType(String type) {
@@ -114,18 +118,16 @@ public class CatalogRepository {
     if (productIds.isEmpty()) {
       return List.of();
     }
-    String inClause = productIds.stream().map(id -> "?").collect(Collectors.joining(","));
-    Object[] params = productIds.toArray();
-    return jdbcTemplate.query(
-        "SELECT id, option_name, option_value, sku, stock_quantity, purchasable FROM product_options WHERE product_id IN (" + inClause + ")",
+    return namedParameterJdbcTemplate.query(
+        "SELECT id, option_name, option_value, sku, stock_quantity, purchasable FROM product_options WHERE product_id IN (:productIds)",
+        new MapSqlParameterSource("productIds", productIds),
         (rs, rowNum) -> new ProductOption(
             rs.getLong("id"),
             rs.getString("option_name"),
             rs.getString("option_value"),
             rs.getString("sku"),
             rs.getInt("stock_quantity"),
-            rs.getBoolean("purchasable")),
-        params);
+            rs.getBoolean("purchasable")));
   }
 
   public LocalDateTime now() {
